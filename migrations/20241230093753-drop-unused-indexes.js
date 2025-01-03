@@ -12,7 +12,7 @@ module.exports = {
       'activities__from_collective_id', // Table: Activities. Size: 100 MB. Replaced by activities__from_collective_id_simple, which skips the transactions activities.
       'activities__host_collective_id', // Table: Activities. Size: 88 MB. Replaced by activities__host_collective_id_simple, which skips the transactions activities.
       'orders__req_ip', // Table: Orders. Size: 21 MB. The fraud detection uses redis, not the DB.
-      'payment_methods__fingerprint', // Table: PaymentMethods. Size: 16 MB
+      // 'payment_methods__fingerprint', // Table: PaymentMethods. Size: 16 MB. Keeping it for manual investigations.
       // 'UploadedFiles_s3_hash', // Table: UploadedFiles. Size: 16 MB. This one is unused because we've disabled Klippa, but we want to keep it in case we re-enable the feature.
       'transaction_wise_transfer_id', // Table: Transactions. Size: 8144 kB
       'expense_tag_stats_tag', // View: ExpenseTagStats. Size: 6864 kB. We're seemingly never fetching BY tag.
