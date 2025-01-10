@@ -5,6 +5,7 @@ import ActivitiesCollectionQuery from './collection/ActivitiesCollectionQuery';
 import ExpensesCollectionQuery from './collection/ExpensesCollectionQuery';
 import ExpenseTagStatsCollectionQuery from './collection/ExpenseTagStatsCollectionQuery';
 import HostsCollectionQuery from './collection/HostsCollectionQuery';
+import MembersCollectionQuery from './collection/MembersCollectionQuery';
 import getOrdersCollectionQuery from './collection/OrdersCollectionQuery';
 import TagStatsCollectionQuery from './collection/TagStatsCollectionQuery';
 import TransactionGroupCollectionQuery from './collection/TransactionGroupCollectionQuery';
@@ -54,6 +55,7 @@ const query = {
   hosts: HostsCollectionQuery,
   individual: IndividualQuery,
   memberInvitations: MemberInvitationsQuery,
+  members: MembersCollectionQuery,
   order: OrderQuery,
   orders: getOrdersCollectionQuery(),
   organization: OrganizationQuery,
