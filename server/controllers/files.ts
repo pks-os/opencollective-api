@@ -50,6 +50,14 @@ export async function getFile(req: Request, res: Response) {
 
   const actualUrl = uploadedFile.getDataValue('url');
 
+  if (uploadedFile.isPublicFile()) {
+    if (isJsonAccepted) {
+      return res.send({ url: actualUrl });
+    } else {
+      return res.redirect(307, actualUrl);
+    }
+  }
+
   if (
     !(await hasUploadedFilePermission(req, uploadedFile, {
       expenseId: expenseId ? idDecode(expenseId as string, IDENTIFIER_TYPES.EXPENSE) : null,
