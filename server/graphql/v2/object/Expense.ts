@@ -558,10 +558,12 @@ export const GraphQLExpense = new GraphQLObjectType<ExpenseModel, express.Reques
             const attachedFiles = (draftData.attachedFiles as { url?: string }[]) || [];
 
             const uploadedFiles = keyBy(
-              (await req.loaders.UploadedFile.byUrl.loadMany([
-                ...items.filter(item => item.url).map(item => item.url),
-                ...attachedFiles.filter(attachedFile => attachedFile.url).map(attachedFile => attachedFile.url),
-              ])) as UploadedFile[],
+              (
+                await req.loaders.UploadedFile.byUrl.loadMany([
+                  ...items.filter(item => item.url).map(item => item.url),
+                  ...attachedFiles.filter(attachedFile => attachedFile.url).map(attachedFile => attachedFile.url),
+                ])
+              ).filter(Boolean) as UploadedFile[],
               uploadedFile => uploadedFile.getDataValue('url'),
             );
 
