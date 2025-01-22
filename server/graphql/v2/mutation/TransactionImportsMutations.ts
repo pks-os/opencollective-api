@@ -3,18 +3,26 @@ import type { Request } from 'express';
 import { GraphQLBoolean, GraphQLList, GraphQLNonNull } from 'graphql';
 import { GraphQLJSONObject, GraphQLNonEmptyString } from 'graphql-scalars';
 import GraphQLUpload from 'graphql-upload/GraphQLUpload.js';
-import { omit, pick } from 'lodash';
+import { isNil, omit, pick } from 'lodash';
 
 import { disconnectPlaidAccount } from '../../../lib/plaid/connect';
 import RateLimit from '../../../lib/rate-limit';
 import twoFactorAuthLib from '../../../lib/two-factor-authentication';
-import { ConnectedAccount, sequelize, TransactionsImport, TransactionsImportRow, UploadedFile } from '../../../models';
+import {
+  ConnectedAccount,
+  Op,
+  sequelize,
+  TransactionsImport,
+  TransactionsImportRow,
+  UploadedFile,
+} from '../../../models';
 import { checkRemoteUserCanUseTransactions } from '../../common/scope-check';
 import { NotFound, RateLimitExceeded, Unauthorized, ValidationFailed } from '../../errors';
 import { GraphQLTransactionsImportType } from '../enum/TransactionsImportType';
 import { idDecode } from '../identifiers';
 import { fetchAccountWithReference, GraphQLAccountReferenceInput } from '../input/AccountReferenceInput';
 import { getValueInCentsFromAmountInput } from '../input/AmountInput';
+import { fetchExpenseWithReference } from '../input/ExpenseReferenceInput';
 import { getDatabaseIdFromOrderReference } from '../input/OrderReferenceInput';
 import { GraphQLTransactionsImportRowCreateInput } from '../input/TransactionsImportRowCreateInput';
 import {
@@ -235,16 +243,17 @@ const transactionImportsMutations = {
           await Promise.all(
             args.rows.map(async row => {
               const rowId = idDecode(row.id, 'transactions-import-row');
+              const where = { id: rowId, TransactionsImportId: importId };
               let values: Parameters<typeof TransactionsImportRow.update>[0] = pick(row, [
                 'sourceId',
                 'description',
                 'date',
-                'isDismissed',
               ]);
               if (row.amount) {
                 values.amount = getValueInCentsFromAmountInput(row.amount);
                 values.currency = row.amount.currency;
               }
+
               if (row.order) {
                 const orderId = getDatabaseIdFromOrderReference(row.order);
                 const order = await req.loaders.Order.byId.load(orderId);
@@ -254,17 +263,32 @@ const transactionImportsMutations = {
                 }
 
                 values['OrderId'] = order.id;
+                values['status'] = 'LINKED';
+              } else if (row.expense) {
+                const expense = await fetchExpenseWithReference(row.expense, {
+                  loaders: req.loaders,
+                  throwIfMissing: true,
+                });
+                const collective = await req.loaders.Collective.byId.load(expense.CollectiveId);
+                if (collective.HostCollectiveId !== transactionsImport.CollectiveId) {
+                  throw new Unauthorized(`Expense not associated with the import: ${expense.id}`);
+                }
+
+                values['ExpenseId'] = expense.id;
+                values['status'] = 'LINKED';
+              } else if (!isNil(row.isDismissed)) {
+                values['status'] = row.isDismissed ? 'IGNORED' : 'PENDING';
+                if (row.isDismissed) {
+                  where['status'] = { [Op.not]: 'LINKED' };
+                }
               }
 
-              // For plaid imports, users can't change amount, date or sourceId
+              // For plaid imports, users can't change imported data
               if (transactionsImport.type === 'PLAID') {
-                values = omit(values, ['amount', 'date', 'sourceId']);
+                values = omit(values, ['amount', 'date', 'sourceId', 'description']);
               }
 
-              const [updatedCount] = await TransactionsImportRow.update(values, {
-                where: { id: rowId, TransactionsImportId: importId },
-                transaction,
-              });
+              const [updatedCount] = await TransactionsImportRow.update(values, { where, transaction });
 
               if (!updatedCount) {
                 throw new NotFound(`Row not found: ${row.id}`);
@@ -273,16 +297,27 @@ const transactionImportsMutations = {
           );
         } else if (args.dismissAll) {
           await TransactionsImportRow.update(
-            { isDismissed: true },
+            { status: 'IGNORED' },
             {
-              where: { TransactionsImportId: importId, isDismissed: false, ExpenseId: null, OrderId: null },
+              where: {
+                TransactionsImportId: importId,
+                status: { [Op.not]: 'IGNORED' },
+                ExpenseId: null,
+                OrderId: null,
+              },
               transaction,
             },
           );
         } else if (args.restoreAll) {
           await TransactionsImportRow.update(
-            { isDismissed: false },
-            { where: { TransactionsImportId: importId, isDismissed: true }, transaction },
+            { status: 'PENDING' },
+            {
+              where: {
+                TransactionsImportId: importId,
+                status: 'IGNORED',
+              },
+              transaction,
+            },
           );
         } else {
           throw new ValidationFailed('You must provide at least one row to update or dismiss/restore all rows');

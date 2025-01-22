@@ -471,6 +471,14 @@ export const canSeeExpenseDraftPrivateDetails: ExpensePermissionEvaluator = asyn
   }
 };
 
+export const canSeeExpenseTransactionImportRow: ExpensePermissionEvaluator = async (req, expense) => {
+  if (!validateExpenseScope(req)) {
+    return false;
+  } else {
+    return isHostAdmin(req, expense);
+  }
+};
+
 /** Checks if the user can verify or resend a draft */
 export const canVerifyDraftExpense: ExpensePermissionEvaluator = async (req, expense): Promise<boolean> => {
   if (!validateExpenseScope(req)) {
@@ -1720,13 +1728,15 @@ export async function createExpense(req: express.Request, expenseData: ExpenseDa
   checkTaxes(collective, collective.host, expenseData.type, taxes);
   checkExpenseItems(expenseData.type, itemsData, taxes);
   checkExpenseType(expenseData.type, collective, collective.parent, collective.host);
-  checkCanUseAccountingCategory(
-    remoteUser,
-    expenseData.type,
-    expenseData.accountingCategory,
-    collective.host,
-    collective,
-  );
+  if (expenseData.accountingCategory) {
+    checkCanUseAccountingCategory(
+      remoteUser,
+      expenseData.type,
+      expenseData.accountingCategory,
+      collective.host,
+      collective,
+    );
+  }
 
   if (size(expenseData.attachedFiles) > 15) {
     throw new ValidationFailed('The number of files that you can attach to an expense is limited to 15');
@@ -1876,7 +1886,7 @@ export async function createExpense(req: express.Request, expenseData: ExpenseDa
     // Link to transactions import
     if (expenseData.transactionsImportRow) {
       await expenseData.transactionsImportRow.update(
-        { ExpenseId: createdExpense.id, isDismissed: false },
+        { ExpenseId: createdExpense.id, status: 'LINKED' },
         { transaction: t },
       );
     }
